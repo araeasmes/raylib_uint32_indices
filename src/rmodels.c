@@ -1283,7 +1283,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
 
     if (mesh->indices != NULL)
     {
-        mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned short), dynamic);
+        mesh->vboId[6] = rlLoadVertexBufferElement(mesh->indices, mesh->triangleCount*3*sizeof(unsigned int), dynamic);
     }
 
     if (mesh->vaoId > 0) TRACELOG(LOG_INFO, "VAO: [ID %i] Mesh uploaded successfully to VRAM (GPU)", mesh->vaoId);
@@ -1857,34 +1857,35 @@ bool ExportMesh(Mesh mesh, const char *fileName)
 
 #if defined(SUPPORT_FILEFORMAT_OBJ) || defined(SUPPORT_FILEFORMAT_MTL)
 // Process obj materials
-static void ProcessMaterialsOBJ(Material *materials, tinyobj_material_t *mats, int materialCount)
+static void ProcessMaterialsOBJ(Material *rayMaterials, tinyobj_material_t *materials, int materialCount)
 {
-    // Init model mats
+    // Init model materials
     for (int m = 0; m < materialCount; m++)
     {
         // Init material to default
         // NOTE: Uses default shader, which only supports MATERIAL_MAP_DIFFUSE
-        materials[m] = LoadMaterialDefault();
+        rayMaterials[m] = LoadMaterialDefault();
 
         // Get default texture, in case no texture is defined
         // NOTE: rlgl default texture is a 1x1 pixel UNCOMPRESSED_R8G8B8A8
-        materials[m].maps[MATERIAL_MAP_DIFFUSE].texture = (Texture2D){ rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+        rayMaterials[m].maps[MATERIAL_MAP_DIFFUSE].texture = (Texture2D){ rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
-        if (mats[m].diffuse_texname != NULL) materials[m].maps[MATERIAL_MAP_DIFFUSE].texture = LoadTexture(mats[m].diffuse_texname);  //char *diffuse_texname; // map_Kd
-        else materials[m].maps[MATERIAL_MAP_DIFFUSE].color = (Color){ (unsigned char)(mats[m].diffuse[0]*255.0f), (unsigned char)(mats[m].diffuse[1]*255.0f), (unsigned char)(mats[m].diffuse[2] * 255.0f), 255 }; //float diffuse[3];
-        materials[m].maps[MATERIAL_MAP_DIFFUSE].value = 0.0f;
+        if (materials[m].diffuse_texname != NULL) rayMaterials[m].maps[MATERIAL_MAP_DIFFUSE].texture = LoadTexture(materials[m].diffuse_texname);  //char *diffuse_texname; // map_Kd
 
-        if (mats[m].specular_texname != NULL) materials[m].maps[MATERIAL_MAP_SPECULAR].texture = LoadTexture(mats[m].specular_texname);  //char *specular_texname; // map_Ks
-        materials[m].maps[MATERIAL_MAP_SPECULAR].color = (Color){ (unsigned char)(mats[m].specular[0]*255.0f), (unsigned char)(mats[m].specular[1]*255.0f), (unsigned char)(mats[m].specular[2] * 255.0f), 255 }; //float specular[3];
-        materials[m].maps[MATERIAL_MAP_SPECULAR].value = 0.0f;
+        rayMaterials[m].maps[MATERIAL_MAP_DIFFUSE].color = (Color){ (unsigned char)(materials[m].diffuse[0]*255.0f), (unsigned char)(materials[m].diffuse[1]*255.0f), (unsigned char)(materials[m].diffuse[2] * 255.0f), 255 }; //float diffuse[3];
+        rayMaterials[m].maps[MATERIAL_MAP_DIFFUSE].value = 0.0f;
 
-        if (mats[m].bump_texname != NULL) materials[m].maps[MATERIAL_MAP_NORMAL].texture = LoadTexture(mats[m].bump_texname);  //char *bump_texname; // map_bump, bump
-        materials[m].maps[MATERIAL_MAP_NORMAL].color = WHITE;
-        materials[m].maps[MATERIAL_MAP_NORMAL].value = mats[m].shininess;
+        if (materials[m].specular_texname != NULL) rayMaterials[m].maps[MATERIAL_MAP_SPECULAR].texture = LoadTexture(materials[m].specular_texname);  //char *specular_texname; // map_Ks
+        rayMaterials[m].maps[MATERIAL_MAP_SPECULAR].color = (Color){ (unsigned char)(materials[m].specular[0]*255.0f), (unsigned char)(materials[m].specular[1]*255.0f), (unsigned char)(materials[m].specular[2] * 255.0f), 255 }; //float specular[3];
+        rayMaterials[m].maps[MATERIAL_MAP_SPECULAR].value = 0.0f;
 
-        materials[m].maps[MATERIAL_MAP_EMISSION].color = (Color){ (unsigned char)(mats[m].emission[0]*255.0f), (unsigned char)(mats[m].emission[1]*255.0f), (unsigned char)(mats[m].emission[2] * 255.0f), 255 }; //float emission[3];
+        if (materials[m].bump_texname != NULL) rayMaterials[m].maps[MATERIAL_MAP_NORMAL].texture = LoadTexture(materials[m].bump_texname);  //char *bump_texname; // map_bump, bump
+        rayMaterials[m].maps[MATERIAL_MAP_NORMAL].color = WHITE;
+        rayMaterials[m].maps[MATERIAL_MAP_NORMAL].value = materials[m].shininess;
 
-        if (mats[m].displacement_texname != NULL) materials[m].maps[MATERIAL_MAP_HEIGHT].texture = LoadTexture(mats[m].displacement_texname);  //char *displacement_texname; // disp
+        rayMaterials[m].maps[MATERIAL_MAP_EMISSION].color = (Color){ (unsigned char)(materials[m].emission[0]*255.0f), (unsigned char)(materials[m].emission[1]*255.0f), (unsigned char)(materials[m].emission[2] * 255.0f), 255 }; //float emission[3];
+
+        if (materials[m].displacement_texname != NULL) rayMaterials[m].maps[MATERIAL_MAP_HEIGHT].texture = LoadTexture(materials[m].displacement_texname);  //char *displacement_texname; // disp
     }
 }
 #endif
@@ -2266,7 +2267,7 @@ Mesh GenMeshPlane(float width, float length, int resX, int resZ)
     mesh.vertices = (float *)RL_MALLOC(mesh.vertexCount*3*sizeof(float));
     mesh.texcoords = (float *)RL_MALLOC(mesh.vertexCount*2*sizeof(float));
     mesh.normals = (float *)RL_MALLOC(mesh.vertexCount*3*sizeof(float));
-    mesh.indices = (unsigned short *)RL_MALLOC(mesh.triangleCount*3*sizeof(unsigned short));
+    mesh.indices = (unsigned int *)RL_MALLOC(mesh.triangleCount*3*sizeof(unsigned int));
 
     // Mesh vertices position array
     for (int i = 0; i < mesh.vertexCount; i++)
@@ -2433,7 +2434,7 @@ Mesh GenMeshCube(float width, float height, float length)
     mesh.normals = (float *)RL_MALLOC(24*3*sizeof(float));
     memcpy(mesh.normals, normals, 24*3*sizeof(float));
 
-    mesh.indices = (unsigned short *)RL_MALLOC(36*sizeof(unsigned short));
+    mesh.indices = (unsigned int *)RL_MALLOC(36*sizeof(unsigned int));
 
     int k = 0;
 
@@ -4224,7 +4225,7 @@ static Model LoadIQM(const char *fileName)
         model.meshes[i].boneWeights = RL_CALLOC(model.meshes[i].vertexCount*4, sizeof(float));      // Up-to 4 bones supported!
 
         model.meshes[i].triangleCount = imesh[i].num_triangles;
-        model.meshes[i].indices = RL_CALLOC(model.meshes[i].triangleCount*3, sizeof(unsigned short));
+        model.meshes[i].indices = RL_CALLOC(model.meshes[i].triangleCount*3, sizeof(unsigned int));
 
         // Animated verted data, what we actually process for rendering
         // NOTE: Animated vertex should be re-uploaded to GPU (if not using GPU skinning)
@@ -5066,22 +5067,22 @@ static Model LoadGLTF(const char *fileName)
                     if (attribute->component_type == cgltf_component_type_r_16u)
                     {
                         // Init raylib mesh indices to copy glTF attribute data
-                        model.meshes[meshIndex].indices = RL_MALLOC(attribute->count*sizeof(unsigned short));
+                        model.meshes[meshIndex].indices = RL_MALLOC(attribute->count*sizeof(unsigned int));
 
                         // Load unsigned short data type into mesh.indices
-                        LOAD_ATTRIBUTE(attribute, 1, unsigned short, model.meshes[meshIndex].indices)
+                        LOAD_ATTRIBUTE(attribute, 1, unsigned int, model.meshes[meshIndex].indices)
                     }
                     else if (attribute->component_type == cgltf_component_type_r_32u)
                     {
                         // Init raylib mesh indices to copy glTF attribute data
-                        model.meshes[meshIndex].indices = RL_MALLOC(attribute->count*sizeof(unsigned short));
+                        model.meshes[meshIndex].indices = RL_MALLOC(attribute->count*sizeof(unsigned int));
 
                         // Load data into a temp buffer to be converted to raylib data type
                         unsigned int *temp = RL_MALLOC(attribute->count*sizeof(unsigned int));
                         LOAD_ATTRIBUTE(attribute, 1, unsigned int, temp);
 
                         // Convert data to raylib indices data type (unsigned short)
-                        for (unsigned int d = 0; d < attribute->count; d++) model.meshes[meshIndex].indices[d] = (unsigned short)temp[d];
+                        for (unsigned int d = 0; d < attribute->count; d++) model.meshes[meshIndex].indices[d] = (unsigned int)temp[d];
 
                         TRACELOG(LOG_WARNING, "MODEL: [%s] Indices data converted from u32 to u16, possible loss of data", fileName);
 
@@ -5200,9 +5201,7 @@ static Model LoadGLTF(const char *fileName)
                 model.meshes[meshIndex].animVertices = RL_CALLOC(model.meshes[meshIndex].vertexCount*3, sizeof(float));
                 memcpy(model.meshes[meshIndex].animVertices, model.meshes[meshIndex].vertices, model.meshes[meshIndex].vertexCount*3*sizeof(float));
                 model.meshes[meshIndex].animNormals = RL_CALLOC(model.meshes[meshIndex].vertexCount*3, sizeof(float));
-                if (model.meshes[meshIndex].normals != NULL) {
-                    memcpy(model.meshes[meshIndex].animNormals, model.meshes[meshIndex].normals, model.meshes[meshIndex].vertexCount*3*sizeof(float));
-                }
+                memcpy(model.meshes[meshIndex].animNormals, model.meshes[meshIndex].normals, model.meshes[meshIndex].vertexCount*3*sizeof(float));
 
                 meshIndex++;       // Move to next mesh
             }
@@ -5378,7 +5377,7 @@ static ModelAnimation *LoadModelAnimationsGLTF(const char *fileName, unsigned in
 
                 strncpy(animations[i].name, animData.name, sizeof(animations[i].name));
                 animations[i].name[sizeof(animations[i].name) - 1] = '\0';
-
+                
                 animations[i].frameCount = (int)(animDuration*1000.0f/GLTF_ANIMDELAY);
                 animations[i].framePoses = RL_MALLOC(animations[i].frameCount*sizeof(Transform *));
 
@@ -5517,9 +5516,11 @@ static Model LoadVOX(const char *fileName)
         memcpy(pmesh->vertices, pvertices, size);
 
         // Copy indices
-        size = voxarray.indices.used*sizeof(unsigned short);
+        size = voxarray.indices.used*sizeof(unsigned int);
         pmesh->indices = RL_MALLOC(size);
-        memcpy(pmesh->indices, pindices, size);
+        for (size_t j = 0; j < voxarray.indices.used; ++j)
+            pmesh->indices[j] = (unsigned int) pindices[j];
+        // memcpy(pmesh->indices, pindices, size);
 
         pmesh->triangleCount = (pmesh->vertexCount/4)*2;
 
